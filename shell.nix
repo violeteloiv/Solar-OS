@@ -5,5 +5,7 @@ mkShell {
         gnumake
         grub2
         xorriso
+        qemu
+        rustup
     ];
 }

@@ -1,6 +1,8 @@
 /.vscode
 /isodir
+/target
 
 *.o
 *.bin
 *.iso
+*.lock
