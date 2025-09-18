@@ -7,5 +7,6 @@ mkShell {
         xorriso
         qemu
         rustup
+        python3
     ];
 }
