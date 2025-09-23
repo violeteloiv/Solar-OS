@@ -17,7 +17,9 @@ SECTIONS
 	   memory which is verified to be available by the firmware, in order to
 	   work around this issue. This does not use that feature, so 2M was
 	   chosen as a safer option than the traditional 1M. */
-	. = 2M;
+	. = 1M;
+
+	KERNEL_START = .;
 
 	/* First put the multiboot header, as it is required to be put very early
 	   in the image or the bootloader won't recognize the file format.
@@ -46,6 +48,13 @@ SECTIONS
 		*(COMMON)
 		*(.bss)
 	}
+
+	/* Without this kernel end is not incremented to avoid colliding with bss */
+	.phony : {
+
+	}
+
+	KERNEL_END = .;
 
 	/* The compiler may produce other sections, by default it will put them in
 	   a segment with the same name. Simply add stuff here as needed. */

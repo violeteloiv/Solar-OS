@@ -8,5 +8,6 @@ mkShell {
         qemu
         rustup
         python3
+        gdb
     ];
 }

@@ -33,7 +33,7 @@ macro_rules! println {
 
 /* Hardware text mode color constants. */
 #[allow(dead_code)]
-enum VgaColor {
+pub enum VgaColor {
     Black = 0,
     Blue = 1,
     Green = 2,
