@@ -8,6 +8,9 @@ use core::{
 };
 use crate::MultibootInfo;
 
+#[global_allocator]
+pub static ALLOC: Allocator = Allocator::new();
+
 #[repr(C, packed)]
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub struct FreeSegment {
@@ -121,19 +124,6 @@ unsafe fn merge_if_adjacent(a: *mut FreeSegment, b: *mut FreeSegment) {
     }
 }
 
-pub unsafe fn print_all_free_segments(a: *mut FreeSegment) {
-    let mut it = a;
-    while !it.is_null() {
-        println!(
-            "{:#x}: {:#x}, {:?}",
-            it as u32,
-            (*it).get_start() as u32,
-            *it
-        );
-        it = (*it).next_segment;
-    }
-}
-
 unsafe fn insert_segment_after(item: *mut FreeSegment, new_segment: *mut FreeSegment) {
     let next = (*item).next_segment;
     (*item).next_segment = new_segment;
@@ -194,4 +184,117 @@ unsafe impl GlobalAlloc for Allocator {
         let header_ptr = get_header_ptr_from_allocated(ptr);
         convert_used_to_free_segment(self.first_free.load(Ordering::Relaxed), header_ptr);
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::testing::*;
+    use alloc::{boxed::Box, vec::Vec};
+
+    // We cannot return a vector here as that alters the alloc state, so we just say that we are only
+    // supporting capture of up to N segments, increase as necessary
+    fn capture_alloc_state() -> [FreeSegment; 100] {
+        unsafe {
+            let mut ret = [FreeSegment {
+                size: 0,
+                next_segment: core::ptr::null_mut(),
+            }; 100];
+            let mut ret_itr = 0;
+            let mut list_itr = ALLOC.first_free.load(Ordering::Relaxed);
+
+            while !list_itr.is_null() {
+                ret[ret_itr] = *list_itr;
+                ret_itr += 1;
+                list_itr = (*list_itr).next_segment;
+            }
+
+            ret
+        }
+    }
+
+    create_test!(test_simple_alloc, {
+        unsafe {
+            let initial_state = capture_alloc_state();
+            let p = Box::new(4);
+
+            test_ne!(initial_state, capture_alloc_state());
+
+            // At this point, from the initial state we should only have one of the blocks decrease in
+            // size by 4 bytes, and that should be the *only* change.
+            let alloc_state = capture_alloc_state();
+            let num_diff = initial_state
+                .iter()
+                .zip(alloc_state.iter())
+                .filter(|(a, b)| a != b)
+                .count();
+            test_eq!(num_diff, 1);
+
+            let diff_item = initial_state
+                .iter()
+                .zip(alloc_state.iter())
+                .find(|(a, b)| a != b)
+                .expect("Count Not Find a != b");
+            let before = core::ptr::addr_of!(diff_item.0.size);
+            let after = core::ptr::addr_of!(diff_item.1.size);
+
+            // We can only test that at least the given memory has been allocated because we do not
+            // know the state of alignment before the allocation
+            test_ge!(
+                before.read_unaligned(),
+                after.read_unaligned() + 4 + core::mem::size_of::<UsedSegment>()
+            );
+
+            drop(p);
+
+            test_eq!(initial_state, capture_alloc_state());
+        }
+
+        Ok(())
+    });
+
+    create_test!(test_nested_vector_alloc, {
+        let initial_state = capture_alloc_state();
+        {
+            let mut v = Vec::new();
+            const NUM_ALLOCATIONS: usize = 10;
+            // Allocating a bunch of shit
+            for i in 1..NUM_ALLOCATIONS {
+                let mut v2 = Vec::new();
+                for j in 0..i {
+                    v2.push(j);
+                }
+                v.push(v2);
+            }
+
+            // Creating holes in allocations
+            for i in (0..NUM_ALLOCATIONS - 1).filter(|x| (x % 2) == 0).rev() {
+                let len = v.len() - 1;
+                v.swap(len, i);
+                v.pop();
+            }
+
+            // Allo and Dealloc Again
+            {
+                let mut v = Vec::new();
+                for i in 1..NUM_ALLOCATIONS {
+                    let mut v2 = Vec::new();
+                    for j in 0..i {
+                        v2.push(j);
+                    }
+                    v.push(v2);
+                }
+            }
+
+            // Check for memory corruption
+            for elem in v {
+                for (i, item) in elem.into_iter().enumerate() {
+                    test_eq!(i, item);
+                }
+            }
+        }
+
+        test_eq!(initial_state, capture_alloc_state());
+        Ok(())
+    });
 }

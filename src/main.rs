@@ -3,13 +3,16 @@
 #![no_main]
 
 #![feature(custom_test_frameworks)]
-#![test_runner(test_runner)]
+#![test_runner(testing::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
 extern crate alloc;
 
 #[macro_use]
 mod io;
+#[cfg(test)]
+#[macro_use]
+mod testing;
 mod allocator;
 mod libc;
 mod multiboot;
@@ -17,11 +20,8 @@ mod multiboot;
 use multiboot::MultibootInfo;
 use io::vga::TerminalWriter;
 
-use core::{arch::global_asm, panic::PanicInfo, sync::atomic::Ordering};
-use alloc::{vec, vec::Vec};
-
-#[global_allocator]
-static ALLOC: allocator::Allocator = allocator::Allocator::new();
+use core::{arch::global_asm, panic::PanicInfo};
+use alloc::vec;
 
 global_asm!(include_str!("boot.s"));
 
@@ -42,7 +42,8 @@ fn test_runner(test_fns: &[&dyn Fn()]) {
 pub unsafe extern "C" fn kernel_main(_multiboot_magic: u32, info: *const MultibootInfo) -> i32 {
     TerminalWriter::init();
     io::serial::Serial::init().expect("Failed To Initialize Serial Output");
-    
+    allocator::ALLOC.init(&*info);
+
     #[cfg(test)]
     {
         test_main();
@@ -51,52 +52,6 @@ pub unsafe extern "C" fn kernel_main(_multiboot_magic: u32, info: *const Multibo
 
     println!("Kernel Range: {:?} -> {:?}", &KERNEL_START as *const u32, &KERNEL_END as *const u32);
     println!("");
-
-    ALLOC.init(&*info);
-
-    let initial_state = ALLOC.first_free.load(Ordering::Relaxed);
-
-    {
-        let mut v = Vec::new();
-        const NUM_ALLOCS: usize = 5;
-        for i in 0..NUM_ALLOCS {
-            let mut v2 = Vec::new();
-            for j in 0..i {
-                v2.push(j);
-            }
-            v.push(v2);
-        }
-
-        for i in (0..(NUM_ALLOCS - 1)).filter(|x| (x % 2) == 0).rev() {
-            let len = v.len() - 1;
-            v.swap(len, i);
-            v.pop();
-        }
-
-        {
-            let mut v = Vec::new();
-            for i in 0..NUM_ALLOCS {
-                let mut v2 = Vec::new();
-                for j in 0..i {
-                    v2.push(j);
-                }
-                v.push(v2);
-            } 
-        }
-
-        println!("Pre Dealloc");
-        allocator::print_all_free_segments(ALLOC.first_free.load(Ordering::Relaxed));
-
-        for elem in v {
-            for (i, item) in elem.iter().enumerate() {
-                assert_eq!(i, *item);
-            }
-        }
-    }
-
-    println!("Post Dealloc");
-    allocator::print_all_free_segments(ALLOC.first_free.load(Ordering::Relaxed));
-    assert_eq!(ALLOC.first_free.load(Ordering::Relaxed), initial_state);
 
     let v = vec![0, 1, 2, 3];
     println!("{:?}", v);
@@ -129,19 +84,4 @@ fn panic(panic_info: &PanicInfo) -> ! {
     println!("{}", panic_info.message());
     unsafe { io::exit(1); }
     loop {}
-}
-
-#[cfg(test)]
-mod tests {
-    #[test_case]
-    fn test() {
-        println!("Test 1");
-        assert!(false);
-    }
-
-    #[test_case]
-    fn test2() {
-        println!("Test 2");
-        assert!(false);
-    }
 }
