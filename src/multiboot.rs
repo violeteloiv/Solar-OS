@@ -55,26 +55,3 @@ pub struct MultibootMmapEntry {
     pub len: u64,
     pub typ: u32,
 }
-
-pub unsafe fn print_mmap_sections(info: *const MultibootInfo) {
-    let num_mmap_addrs = (*info).mmap_length / core::mem::size_of::<MultibootMmapEntry>() as u32;
-    let boot_loader_name_slice = core::slice::from_raw_parts((*info).boot_loader_name, 4);
-    let boot_loader_str = core::str::from_utf8_unchecked(boot_loader_name_slice);
-    println!("Bootloader Name: {}", boot_loader_str);
-    println!("Available Memory Segments...");
-    println!("# Memory Mappable Addresses: {num_mmap_addrs}");
-
-    let mut total_length = 0;
-    for entry in (*info).get_mmap_addrs() {
-        let len = entry.len as f32 / 1024.0;
-        let size = entry.size;
-        if size == 0 {
-            continue;
-        }
-        let addr = entry.addr;
-        total_length += entry.len;
-        println!("size: {size}, len: {len} KB, addr: {addr:#04X}");
-    }
-
-    println!("total_length: {} MB", total_length as f32 / 1024.0 / 1024.0);
-}
