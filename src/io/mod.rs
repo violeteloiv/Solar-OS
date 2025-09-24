@@ -8,12 +8,11 @@ macro_rules! print {
         #[allow(unused_unsafe)]
         unsafe {
             use core::fmt::Write as FmtWrite;
-            // write_fmt needs writer as &mut, but we only access it as *const. Cast to fulfil the
-            // API requirements
-            let writer = &mut *$crate::io::vga::TERMINAL_WRITER.inner.get();
-            write!(&mut *(writer), $($arg)*).expect("Failed to print to vga");
-            let serial = &mut *$crate::io::serial::SERIAL.inner.get();
-            write!(&mut *(serial), $($arg)*).expect("Failed to print to serial");
+            let mut writer = $crate::io::vga::TERMINAL_WRITER.borrow_mut();
+            write!(writer, $($arg)*).expect("Failed to print to VGA");
+
+            let mut serial = $crate::io::serial::SerialWriter::new();
+            write!(serial, $($arg)*).expect("FAiled to print to Serial");
         }
     }
 }

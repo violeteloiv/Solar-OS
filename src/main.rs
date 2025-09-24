@@ -18,7 +18,6 @@ mod libc;
 mod multiboot;
 
 use multiboot::MultibootInfo;
-use io::vga::TerminalWriter;
 
 use core::{arch::global_asm, panic::PanicInfo};
 use alloc::vec;
@@ -40,9 +39,9 @@ fn test_runner(test_fns: &[&dyn Fn()]) {
 
 #[no_mangle]
 pub unsafe extern "C" fn kernel_main(_multiboot_magic: u32, info: *const MultibootInfo) -> i32 {
-    TerminalWriter::init();
-    io::serial::Serial::init().expect("Failed To Initialize Serial Output");
-    allocator::ALLOC.init(&*info);
+    io::vga::init();
+    io::serial::init().expect("Failed To Initialize Serial");
+    allocator::init(&*info);
 
     #[cfg(test)]
     {
