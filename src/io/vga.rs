@@ -11,26 +11,6 @@ pub static TERMINAL_WRITER: WriterWrapper = WriterWrapper {
     inner: UnsafeCell::new(TerminalWriter::new()),
 };
 
-macro_rules! print {
-    ($($arg:tt)*) => {
-        #[allow(unused_unsafe)]
-        unsafe {
-            use core::fmt::Write as FmtWrite;
-            // write_fmt needs writer as &mut, but we only access it as *const. Cast to fulfil the
-            // API requirements
-            let writer = &mut *$crate::vga::TERMINAL_WRITER.inner.get();
-            write!(&mut *(writer), $($arg)*).expect("Failed to print")
-        }
-    }
-}
-
-macro_rules! println {
-    ($($arg:tt)*) => {
-        print!($($arg)*);
-        print!("\n");
-    }
-}
-
 /* Hardware text mode color constants. */
 #[allow(dead_code)]
 pub enum VgaColor {
