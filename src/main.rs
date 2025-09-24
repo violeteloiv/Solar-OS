@@ -2,6 +2,10 @@
 #![no_std]
 #![no_main]
 
+#![feature(custom_test_frameworks)]
+#![test_runner(test_runner)]
+#![reexport_test_harness_main = "test_main"]
+
 extern crate alloc;
 
 #[macro_use]
@@ -28,11 +32,23 @@ extern "C" {
     static KERNEL_END: u32;
 }
 
+fn test_runner(test_fns: &[&dyn Fn()]) {
+    for test_fn in test_fns {
+        test_fn();
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn kernel_main(_multiboot_magic: u32, info: *const MultibootInfo) -> i32 {
     TerminalWriter::init();
     io::serial::Serial::init().expect("Failed To Initialize Serial Output");
     
+    #[cfg(test)]
+    {
+        test_main();
+        io::exit(0);
+    }
+
     println!("Kernel Range: {:?} -> {:?}", &KERNEL_START as *const u32, &KERNEL_END as *const u32);
     println!("");
 
@@ -94,6 +110,8 @@ pub unsafe extern "C" fn kernel_main(_multiboot_magic: u32, info: *const Multibo
     unsafe {
         multiboot::print_mmap_sections(info);
     }
+    
+    io::exit(0);
     0
 }
 
@@ -109,5 +127,21 @@ fn panic(panic_info: &PanicInfo) -> ! {
         print!("Solar Kernel Panic At Unknown Location | ");
     }
     println!("{}", panic_info.message());
+    unsafe { io::exit(1); }
     loop {}
+}
+
+#[cfg(test)]
+mod tests {
+    #[test_case]
+    fn test() {
+        println!("Test 1");
+        assert!(false);
+    }
+
+    #[test_case]
+    fn test2() {
+        println!("Test 2");
+        assert!(false);
+    }
 }
