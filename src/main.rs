@@ -31,17 +31,12 @@ extern "C" {
     static KERNEL_END: u32;
 }
 
-fn test_runner(test_fns: &[&dyn Fn()]) {
-    for test_fn in test_fns {
-        test_fn();
-    }
-}
-
 #[no_mangle]
 pub unsafe extern "C" fn kernel_main(_multiboot_magic: u32, info: *const MultibootInfo) -> i32 {
-    io::vga::init();
-    io::serial::init().expect("Failed To Initialize Serial");
     allocator::init(&*info);
+    let mut port_manager = io::port_manager::PortManager::new();
+    io::init_stdio(&mut port_manager);
+    io::init_late(&mut port_manager);
 
     #[cfg(test)]
     {
